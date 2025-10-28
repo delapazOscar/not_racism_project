@@ -3,7 +3,7 @@ import Image from "next/image";
 
 export default function HomePage() {
   return (
-    <>
+    <div className="select-none">
       {/* Hero section */}
       <section className="mx-auto max-w-6xl px-4 py-20 md:flex md:items-start md:gap-12">
         <div className="md:w-1/2">
@@ -175,6 +175,6 @@ export default function HomePage() {
           </p>
         </form>
       </section>
-    </>
+    </div>
   );
 }
