@@ -253,10 +253,6 @@ export default function HomePage() {
             </p>
           )}
 
-          <p className="text-[11px] text-gray-500 leading-snug">
-            *Los testimonios se guardan en Firestore. Para moderación avanzada, se
-            recomienda agregar un flujo de revisión antes de mostrarlos públicamente.
-          </p>
         </form>
       </section>
     </div>
