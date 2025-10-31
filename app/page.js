@@ -1,7 +1,82 @@
-// app/page.js
-import Image from "next/image";
+"use client";
+
+import { useEffect, useMemo, useState, useTransition } from "react";
+import {
+  addDoc,
+  collection,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  limit,
+} from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 export default function HomePage() {
+  // ----------------- Estado UI y formulario -----------------
+  const [mensaje, setMensaje] = useState("");
+  const [lugar, setLugar] = useState("");
+  const [contexto, setContexto] = useState("");
+  const [enviando, startTransition] = useTransition();
+  const [error, setError] = useState("");
+  const [ok, setOk] = useState("");
+
+  // ----------------- Lectura en vivo de Firestore -----------------
+  const [items, setItems] = useState([]);
+  const testimoniosRef = useMemo(
+    () => collection(db, "testimonios"),
+    []
+  );
+
+  useEffect(() => {
+    const q = query(testimoniosRef, orderBy("createdAt", "desc"), limit(30));
+    const unsub = onSnapshot(q, (snap) => {
+      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setItems(rows);
+    });
+    return () => unsub();
+  }, [testimoniosRef]);
+
+  // ----------------- Validación sencilla -----------------
+  function validar() {
+    if (!mensaje || mensaje.trim().length < 20) {
+      return "Cuéntanos con al menos 20 caracteres.";
+    }
+    if (!contexto) return "Selecciona un contexto.";
+    return "";
+  }
+
+  // ----------------- Guardar testimonio -----------------
+  async function onSubmit(e) {
+    e.preventDefault();
+    setError("");
+    setOk("");
+
+    const v = validar();
+    if (v) {
+      setError(v);
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        await addDoc(testimoniosRef, {
+          mensaje: mensaje.trim(),
+          lugar: (lugar || "").trim(),
+          contexto,
+          createdAt: serverTimestamp(),
+        });
+        setMensaje("");
+        setLugar("");
+        setContexto("");
+        setOk("Gracias por compartir. ¡Tu testimonio ya está en la lista!");
+      } catch (err) {
+        setError("No se pudo enviar. Revisa tu conexión e inténtalo de nuevo.");
+        console.error(err);
+      }
+    });
+  }
+
   return (
     <div className="select-none">
       {/* Hero section */}
@@ -44,7 +119,7 @@ export default function HomePage() {
           <div className="rounded-xl border bg-white p-6 shadow-sm">
             <p className="text-sm font-medium text-gray-800">
               “Me dijeron que yo ‘no daba la imagen’ para estar en recepción,
-              que mejor me mandaban a bodega porque ‘ahí casi no se ve’.”
+              que mejor me mandaban a bodega porque ‘ahí casi no se ve’. ”
             </p>
             <p className="mt-4 text-xs text-gray-500">
               Mujer, 22 años · CDMX · Sector retail
@@ -64,10 +139,7 @@ export default function HomePage() {
       </section>
 
       {/* Sección de historias */}
-      <section
-        id="historias"
-        className="bg-gray-50 py-16 px-4 border-y border-gray-200"
-      >
+      <section id="historias" className="bg-gray-50 py-16 px-4 border-y border-gray-200">
         <div className="mx-auto max-w-6xl">
           <h2 className="text-2xl font-semibold text-gray-900 md:text-3xl">
             Historias recientes
@@ -78,45 +150,37 @@ export default function HomePage() {
             hospitales y espacios públicos. No mostramos nombres reales.
           </p>
 
+          {/* Lista dinámica desde Firestore */}
           <div className="mt-10 grid gap-6 md:grid-cols-3">
-            <article className="rounded-lg border bg-white p-5 shadow-sm">
-              <div className="text-sm text-gray-800">
-                “En la entrevista me dijeron que buscaban ‘gente con mejor
-                presentación’, y después vi quién sí se quedó.”
+            {items.length === 0 && (
+              <div className="col-span-full text-sm text-gray-500">
+                Aún no hay testimonios. ¡Sé la primera persona en compartir!
               </div>
-              <div className="mt-4 text-[11px] text-gray-500 uppercase tracking-wide">
-                Monterrey · Entrevista laboral
-              </div>
-            </article>
+            )}
 
-            <article className="rounded-lg border bg-white p-5 shadow-sm">
-              <div className="text-sm text-gray-800">
-                “En la tienda me siguieron como si fuera a robar. A mi amiga,
-                que es más blanca, no.”
-              </div>
-              <div className="mt-4 text-[11px] text-gray-500 uppercase tracking-wide">
-                Guadalajara · Centro comercial
-              </div>
-            </article>
-
-            <article className="rounded-lg border bg-white p-5 shadow-sm">
-                <div className="text-sm text-gray-800">
-                  “Me dijeron ‘habla bien’ cuando hablé con mi mamá en mixe en
-                  la sala de espera.”
+            {items.map((t) => (
+              <article key={t.id} className="rounded-lg border bg-white p-5 shadow-sm">
+                <div
+                  className="
+                    text-sm text-gray-800 whitespace-pre-wrap
+                    break-words [overflow-wrap:anywhere] [word-break:break-word] [hyphens:auto]
+                    max-h-40 overflow-y-auto pr-1
+                  "
+                >
+                  {`“${t.mensaje || "(sin texto)"}”`}
                 </div>
+
                 <div className="mt-4 text-[11px] text-gray-500 uppercase tracking-wide">
-                  Oaxaca · Clínica pública
+                  {(t.lugar || "Lugar no especificado")} · {t.contexto || "Sin contexto"}
                 </div>
-            </article>
+              </article>
+            ))}
           </div>
         </div>
       </section>
 
       {/* CTA para compartir */}
-      <section
-        id="compartir"
-        className="mx-auto max-w-3xl px-4 py-20 text-center"
-      >
+      <section id="compartir" className="mx-auto max-w-3xl px-4 py-20 text-center">
         <h2 className="text-2xl font-semibold text-gray-900 md:text-3xl">
           ¿Te ha pasado algo así?
         </h2>
@@ -127,13 +191,17 @@ export default function HomePage() {
           “eso no pasa en México”.
         </p>
 
-        <form className="mx-auto mt-10 flex flex-col gap-4 text-left">
+        <form onSubmit={onSubmit} className="mx-auto mt-10 flex flex-col gap-4 text-left">
           <label className="text-sm font-medium text-gray-700">
             Cuéntanos qué pasó
             <textarea
               className="mt-2 w-full rounded-lg border border-gray-300 p-3 text-sm text-gray-800 outline-none focus:border-black focus:ring-1 focus:ring-black"
               rows={4}
               placeholder="Ejemplo: En la escuela me dijeron..."
+              value={mensaje}
+              onChange={(e) => setMensaje(e.target.value)}
+              required
+              minLength={20}
             />
           </label>
 
@@ -142,6 +210,8 @@ export default function HomePage() {
             <input
               className="mt-2 w-full rounded-lg border border-gray-300 p-3 text-sm text-gray-800 outline-none focus:border-black focus:ring-1 focus:ring-black"
               placeholder="Ejemplo: Puebla, Tlaxcala, etc."
+              value={lugar}
+              onChange={(e) => setLugar(e.target.value)}
             />
           </label>
 
@@ -149,7 +219,9 @@ export default function HomePage() {
             Contexto
             <select
               className="mt-2 w-full rounded-lg border border-gray-300 bg-white p-3 text-sm text-gray-800 outline-none focus:border-black focus:ring-1 focus:ring-black"
-              defaultValue=""
+              value={contexto}
+              onChange={(e) => setContexto(e.target.value)}
+              required
             >
               <option value="" disabled>
                 Selecciona una opción
@@ -164,14 +236,26 @@ export default function HomePage() {
 
           <button
             type="submit"
-            className="mt-6 inline-block w-full rounded-lg bg-black px-5 py-3 text-center text-white text-base font-medium hover:bg-gray-800"
+            disabled={enviando}
+            className="mt-6 inline-block w-full rounded-lg bg-black px-5 py-3 text-center text-white text-base font-medium hover:bg-gray-800 disabled:opacity-60"
           >
-            Enviar testimonio
+            {enviando ? "Enviando…" : "Enviar testimonio"}
           </button>
 
+          {error && (
+            <p className="text-sm text-red-600" role="alert">
+              {error}
+            </p>
+          )}
+          {ok && (
+            <p className="text-sm text-green-700" role="status">
+              {ok}
+            </p>
+          )}
+
           <p className="text-[11px] text-gray-500 leading-snug">
-            *En esta versión demo todavía no guardamos los datos. Solo es
-            maqueta visual.
+            *Los testimonios se guardan en Firestore. Para moderación avanzada, se
+            recomienda agregar un flujo de revisión antes de mostrarlos públicamente.
           </p>
         </form>
       </section>
